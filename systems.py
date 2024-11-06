@@ -91,7 +91,14 @@ def appoint_divisor(
                 # candidates)
                 if np.all(coef_party[chosen_pact] == 0):
                     coef_pact[chosen_pact] = 0
+            
+                # if all pacts have their coefficients at 0, then we have
+                # ran out of candidates to pick! simply break
+                if np.all(coef_pact == 0):
+                    break
+                
                 continue
+
             
             # add the seat
             votes.loc[chosen_candidate_idx, "elected"] = True

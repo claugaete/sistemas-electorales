@@ -297,23 +297,35 @@ class Apportionment:
         }, index=self.districts)
 
     # plots
-    def plot_quota_diff(self):
+    def plot_quota_diff(self, sort_vote_share=False):
         """
         Plots the difference between expected seats and actual seats for each
-        party (as calculated by checking the quota rule).
+        party (as calculated by checking the quota rule). Use `sort` to plot
+        parties in order of their vote share, overriding the default party
+        order.
         """
 
         quota_df = self.quota_condition()
+        
+        if sort_vote_share:
+            parties = self.party_vote_share.sort_values(
+                ascending=False
+            ).index.to_list()
+            colors = self.colors.reindex(parties)
+            quota_df = quota_df.reindex(index=parties)
+        else:
+            parties = self.parties
+            colors = self.colors
 
         fig, ax = plt.subplots()
 
         ax.bar(
-            self.parties,
+            parties,
             quota_df["seats"] - quota_df["expected"],
-            color=self.colors,
+            color=colors,
         )
-        ax.set_xticks(self.parties)
-        ax.set_xticklabels(self.parties, rotation=90)
+        ax.set_xticks(parties)
+        ax.set_xticklabels(parties, rotation=90)
 
         ax.set_xlabel("Partido")
         ax.set_ylabel("Dif. entre escaños reales y esperados")
@@ -466,6 +478,6 @@ Distritos donde todos los partidos cumplen quota: {
 """
         )
 
-        fig_quota = self.plot_quota_diff()
+        fig_quota = self.plot_quota_diff(sort_vote_share=True)
         fig_parliament = self.plot_parliament()
         plt.show()

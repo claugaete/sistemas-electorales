@@ -6,68 +6,154 @@ from typing import Literal
 from parliamentarch_geometry import get_seats_centers
 
 
-def merge_columns(df, new_names):
+def groupby_sum_and_pivot(df, index, columns, values, column_order = None):
+    """
+    Group values of a dataframe on two columns (`index` and `columns`), sums
+    the values of `values` for each group and pivots it into a dataframe where
+    the rows are represented by the values of `index`, and the columns by the
+    values of `columns`. New column order can also be changed (or columns can
+    be removed) by passing the extra parameter `column_order` with a list of
+    the new columns to keep.
+    """
     
-    return df.rename(columns=new_names).T.groupby(level=0).sum().T
+    pivoted_df = (
+        df.groupby([index, columns])[values]
+        .sum()
+        .to_frame().reset_index()
+        .pivot(index=index, columns=columns, values=values)
+        .replace(to_replace={np.nan: 0})
+    )
+    
+    if column_order is not None:
+        return pivoted_df.reindex(columns=column_order)
+    else:
+        return pivoted_df
+
 
 class Apportionment:
 
     def __init__(
         self,
-        district_party_votes: pd.DataFrame,
+        results: pd.DataFrame,
         district_fixed_seats: pd.Series,
-        district_party_results: pd.DataFrame,
-        pacts: dict[str, list[str]] | None = None,
-        colors: pd.Series | None = None
+        colors: pd.Series | None = None,
+        party_order: list[str] | None = None
     ):
-        
-        self.parties = district_party_results.columns.to_list()
-        self.districts = district_party_results.index.to_list()
-        self.colors = colors        
-        if pacts is None:
-            self.pacts = dict(zip(self.parties, self.parties))
+        """
+        Receives:
+        - `results`: a dataframe with five columns: `candidate`, `pact`,
+            `party`, `district`, and `votes`.
+        - `district_fixed_seats`: a series with districts on its indices, 
+            and the number of guaranteed seats per district as values.
+        - `colors`: a series with parties on its indices, and a
+            `matplotlib`-accepted color for each party as values.
+        - `party_order`: a list with all the parties in `results`, in any
+            desired order. It is used for ordering all frames and graphs with
+            parties involved.
+        """
+
+        self.results = results.copy()
+
+        # if no party order is given, we default to dataframe order
+        real_parties = self.results["party"].drop_duplicates().to_list()
+        if party_order is None:
+            self.parties = real_parties
+
         else:
-            self.pacts = pacts
+            party_order_set = set(party_order)
+            missing_parties = set(real_parties).difference(party_order_set)
+
+            # if there are missing parties in the given order, error
+            if len(missing_parties) > 0:
+                raise ValueError(
+                    "party_order is missing parties present in dataframe:" +
+                    str(missing_parties)
+                )
+
+            # if there are duplicates, error
+            if len(party_order) != len(party_order_set):
+                raise ValueError(
+                    "party_order contains duplicates"
+                )
+
+            # use the given order, removing entries that aren't in the
+            # actual dataframe
+            self.parties = [
+                p for p in party_order if p in real_parties
+            ]
+
+        self.districts = (
+            self.results["district"]
+            .drop_duplicates()
+            .sort_values()
+            .to_list()
+        )
+
+        self.colors = colors
+
+        self.pacts = self.results["pact"].drop_duplicates().to_list()
+
+        # add percentage of votes (of their district) to each candidate
+        district_votes = (
+            self.results.groupby("district")["votes"]
+            .sum()
+            .rename("district_votes")
+        )
+        self.results = self.results.merge(
+            district_votes,
+            how="inner",
+            left_on="district",
+            right_on=district_votes.index
+        )
+        self.results["percentage"] = (
+            self.results["votes"] / self.results["district_votes"]
+        )
+        self.results = self.results.drop(columns="district_votes")
 
         # district-party data
-        self.district_party_votes = district_party_votes
-        self.district_party_expected = district_party_votes.div(
-            district_party_votes.sum(axis=1), axis=0
+        self.district_party_votes = groupby_sum_and_pivot(
+            self.results, "district", "party", "votes", self.parties
+        ).astype(int)
+        self.district_party_vote_share = groupby_sum_and_pivot(
+            self.results, "district", "party", "percentage", self.parties
         )
-        self.district_party_results = district_party_results
+        self.district_party_results = groupby_sum_and_pivot(
+            self.results, "district", "party", "elected", self.parties
+        ).astype(int)
 
         # district seat data
         self.district_fixed_seats = district_fixed_seats
-        self.district_real_seats = district_party_results.sum(axis=1)
+        self.district_real_seats = (
+            self.results.groupby("district")["elected"].sum()
+        )
 
         # party data
-        self.party_expected = (
-            district_party_votes.sum(axis=0)
-            / district_party_votes.sum().sum()
+        self.party_vote_share = (
+            self.district_party_votes.sum(axis=0)
+            / self.district_party_votes.sum().sum()
         )
-        self.party_results = district_party_results.sum(axis=0)
+        self.party_results = (
+            self.district_party_results
+            .sum(axis=0)
+        )
 
-        party_to_pact = []
-        for pact, parties in self.pacts.items():
-            for party in parties:
-                party_to_pact.append((party, pact))
         # district-pact data
-        self.district_pact_votes = merge_columns(
-            district_party_votes, dict(party_to_pact)
+        self.district_pact_votes = groupby_sum_and_pivot(
+            self.results, "district", "pact", "votes"
+        ).astype(int)
+        self.district_pact_vote_share = groupby_sum_and_pivot(
+            self.results, "district", "pact", "percentage"
         )
-        self.district_pact_expected = self.district_pact_votes.div(
-            self.district_pact_votes.sum(axis=1), axis=0
-        )
-        self.district_pact_results = merge_columns(
-            district_party_results, dict(party_to_pact)
-        )
+        self.district_pact_results = groupby_sum_and_pivot(
+            self.results, "district", "pact", "elected"
+        ).astype(int)
         # pact data
-        self.pact_expected = (
+        self.pact_vote_share = (
             self.district_pact_votes.sum(axis=0)
             / self.district_pact_votes.sum().sum()            
         )
         self.pact_results = self.district_pact_results.sum(axis=0)
-        
+
         self.n_seats = self.party_results.sum()
 
     # measure disproportionality
@@ -76,13 +162,17 @@ class Apportionment:
         type: Literal["gallagher", "loosemore-hanby", "wasted-pct"],
         use_pacts: bool = False
     ) -> float:
+        """
+        Returns the desired disproportionality index, calculated at the
+        national level.
+        """
 
         if type in ("gallagher", "loosemore-hanby"):
             if use_pacts:
-                expected = self.pact_expected
+                expected = self.pact_vote_share
                 results = self.pact_results.copy()
             else:
-                expected = self.party_expected
+                expected = self.party_vote_share
                 results = self.party_results.copy()
 
             # normalizamos los resultados
@@ -117,12 +207,16 @@ class Apportionment:
         type: Literal["gallagher", "loosemore-hanby", "wasted-pct"],
         use_pacts: bool = False
     ) -> pd.Series:
+        """
+        Returns a series with the desired disproportionality index calculated
+        at district level for all districts.
+        """
 
         if use_pacts:
-            expected = self.district_pact_expected
+            expected = self.district_pact_vote_share
             results = self.district_pact_results.copy()
         else:
-            expected = self.district_party_expected
+            expected = self.district_party_vote_share
             results = self.district_party_results.copy()
 
         # normalize results for each district
@@ -142,6 +236,10 @@ class Apportionment:
 
     # fragmentation
     def effective_num_parties(self, use_pacts: bool = False) -> float:
+        """
+        Returns the effective number of parties in parliament, using the
+        formula by Laakso and Taagepera.
+        """
 
         if use_pacts:
             return 1 / np.sum(np.square(self.pact_results / self.n_seats))
@@ -150,13 +248,19 @@ class Apportionment:
 
     # quota conditions
     def quota_condition(self, district = None) -> pd.DataFrame:
+        """
+        Returns a dataframe in which the obtained number of seats for each
+        party is compared with the expected number of seats (vote share
+        multiplied by total seats), in order to calculate whether each party
+        fulfills the quota rule.
+        """
 
         if district is None:
-            expected_seats = self.party_expected * self.party_results.sum()
+            expected_seats = self.party_vote_share * self.party_results.sum()
             results = self.party_results
         else:
             expected_seats = (
-                self.district_party_expected.loc[district]
+                self.district_party_vote_share.loc[district]
                 * self.district_real_seats[district]
             )
             results = self.district_party_results.loc[district]
@@ -171,6 +275,11 @@ class Apportionment:
         }, index=self.parties)
 
     def quota_condition_districts(self) -> pd.DataFrame:
+        """
+        Checks the quota rule for each party at district level, and counts
+        the number of parties in each district that meet (and don't meet) the
+        rule.
+        """
 
         n_parties = len(self.parties)
 
@@ -189,6 +298,10 @@ class Apportionment:
 
     # plots
     def plot_quota_diff(self):
+        """
+        Plots the difference between expected seats and actual seats for each
+        party (as calculated by checking the quota rule).
+        """
 
         quota_df = self.quota_condition()
 
@@ -197,8 +310,10 @@ class Apportionment:
         ax.bar(
             self.parties,
             quota_df["seats"] - quota_df["expected"],
-            color=self.colors
+            color=self.colors,
         )
+        ax.set_xticks(self.parties)
+        ax.set_xticklabels(self.parties, rotation=90)
 
         ax.set_xlabel("Partido")
         ax.set_ylabel("Dif. entre escaños reales y esperados")
@@ -207,6 +322,9 @@ class Apportionment:
         return fig
 
     def plot_parliament(self):
+        """
+        Plots the parliament results as a hemicycle (à la Wikipedia).
+        """
 
         sorted_seat_centers = sorted(
             get_seats_centers(self.n_seats).items(),
@@ -220,10 +338,10 @@ class Apportionment:
         color_list = []
         legend_elems = []
         for party, party_seats in self.party_results.items():
-            
+
             if party_seats == 0:
                 continue
-            
+
             color_list += [self.colors[party]]*party_seats
             legend_elems.append(Line2D(
                 [0],
@@ -242,7 +360,8 @@ class Apportionment:
             seat_centers_array[:, 0],
             seat_centers_array[:, 1],
             c=color_list,
-            s=100
+            # more seats => dots are smaller (up to a point)
+            s=np.clip(30_000/(self.n_seats+1), 0, 500),
         )
         ax.text(1, 0.1, self.n_seats, fontsize=50, ha="center")
         ax.set_axis_off()
@@ -253,16 +372,20 @@ class Apportionment:
 
     # summary of statistics
     def summary(self):
+        """
+        Prints a summary of the most important statistics, and shows useful
+        graphs.
+        """
 
         extra_seats = (self.district_real_seats - self.district_fixed_seats)
-        
+
         extra_seat_distribution = (
             extra_seats
             .groupby(extra_seats)
             .count()
             .to_string()
         )
-        
+
         gallagher_parties = self.disproportionality_national(
             type="gallagher"
         )*100
@@ -281,7 +404,7 @@ class Apportionment:
         wasted_pacts = self.disproportionality_national(
             type="wasted-pct", use_pacts=True
         )*100
-        
+
         district_disp_df = pd.DataFrame({
             'gallagher-partidos': self.disproportionality_districts(
                 type="gallagher"
@@ -302,14 +425,15 @@ class Apportionment:
                 type="wasted-pct", use_pacts=True
             )
         }).describe().loc[["mean", "std", "min", "50%", "max"]]
-        
-        
+
         parties_meet_quota = self.quota_condition()["meets_quota"].sum()
+        district_parties_with_quota = self.quota_condition_districts()[
+            "parties_with_quota"
+        ]
         districts_meet_quota = (
-            len(self.districts)
-            - self.quota_condition_districts()["parties_without_quota"].sum()
-        )
-        
+            district_parties_with_quota == len(self.parties)
+        ).sum()
+
         print(
             f"""RESUMEN DE ESTADÍSTICAS:
 
@@ -329,19 +453,19 @@ Disproporcionalidad por distrito:
 {district_disp_df}
 
 Fragmentación:
-- Número de partidos: {len(self.parties)}
+- Número de partidos: {(self.party_results > 0).sum()}
 - Número efectivo de partidos: {self.effective_num_parties():.2f}
-- Número de pactos: {len(self.pacts)}
+- Número de pactos: {(self.pact_results > 0).sum()}
 - Número efectivo de pactos: {self.effective_num_parties(use_pacts=True):.2f}
 
 Quotas:
 Partidos que cumplen quota: {parties_meet_quota}/{len(self.parties)}
 Distritos donde todos los partidos cumplen quota: {
-    districts_meet_quota}/{len(self.districts)
-}
+    districts_meet_quota
+}/{len(self.districts)}
 """
         )
-        
+
         fig_quota = self.plot_quota_diff()
         fig_parliament = self.plot_parliament()
         plt.show()

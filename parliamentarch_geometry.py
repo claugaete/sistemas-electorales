@@ -1,5 +1,5 @@
 """
-El siguiente código es una modificación de:
+El siguiente código es un fargmento de:
 https://github.com/Gouvernathor/parliamentarch
 """
 

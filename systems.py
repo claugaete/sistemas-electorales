@@ -7,8 +7,27 @@ def appoint_divisor(
     df: pd.DataFrame,
     district_seats: pd.Series,
     type: Literal["dhondt", "sainte-lague"] = "dhondt",
-    party_threshold: float = 0.0
+    party_threshold: float = 0.0,
+    selection_criteria: tuple[str, bool] = ("votes", False)
 ) -> pd.DataFrame:
+    """
+    Receives:
+    - `df`: a dataframe with candidate information; it must have at least 4
+    columns: `district`, `pact`, `party`, and `votes`.
+    - `district_seats`: a series that assigns a number of seats for each
+        district.
+    - `type`: whether the assignment should be done using D'Hondt/Jefferson or
+        Sainte-Lague/Webster.
+    - `party_threshold`: minimum percentage of votes a party must receive to be
+        eligible for seat allocation. Must be between 0 and 1.
+    - `selection_criteria`: criteria by which the candidates for each party
+        will be sorted and selected. First element of the tuple is the column
+        name, second element is whether the sort is ascending or not. Defaults
+        to sorting by the number of votes (descending).
+    
+    Returns: a copy of `df` with an extra column `elected`, that says whether
+        each candidate was elected to the parliament or not.
+    """
     
     if type == "dhondt":
         denominator = lambda x: x + 1
@@ -20,8 +39,8 @@ def appoint_divisor(
     # copy of the original array, sorting by votes and adding an extra column
     # for results
     votes = df.copy().sort_values(
-        by=["district", "pact", "party", "votes"],
-        ascending=[True, True, True, False]
+        by=["district", "pact", "party", selection_criteria[0]],
+        ascending=[True, True, True, selection_criteria[1]]
     )
     votes["valid"] = True
     votes["elected"] = False

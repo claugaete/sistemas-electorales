@@ -388,9 +388,34 @@ class Apportionment:
         Prints a summary of the most important statistics, and shows useful
         graphs.
         """
+        
+        column_names = {
+            "candidate": "Candidato",
+            "pact": "Pacto",
+            "party": "Partido",
+            "district": "Distrito",
+            "percentage": "Votos (%)"
+        }
+        best_losers = (
+            self.results[self.results["elected"]==False]
+            .sort_values(by="percentage", ascending=False)
+            .head(5)
+            .copy()
+            .rename(columns=column_names)
+            .set_index("Candidato")
+        )[list(column_names.values())[1:]]
+        best_losers["Votos (%)"] *= 100
+        worst_winners = (
+            self.results[self.results["elected"]==True]
+            .sort_values(by="percentage")
+            .head(5)
+            .copy()
+            .rename(columns=column_names)
+            .set_index("Candidato")
+        )[list(column_names.values())[1:]]
+        worst_winners["Votos (%)"] *= 100
 
         extra_seats = (self.district_real_seats - self.district_fixed_seats)
-
         extra_seat_distribution = (
             extra_seats
             .groupby(extra_seats)
@@ -448,6 +473,12 @@ class Apportionment:
 
         print(
             f"""RESUMEN DE ESTADÍSTICAS:
+
+Candidatos con menos votos que fueron electos:
+{worst_winners}
+
+Candidatos con más votos que no fueron electos:
+{best_losers}
 
 Número de distritos por cantidad de escaños extra:
 N° escaños extra / N° distritos

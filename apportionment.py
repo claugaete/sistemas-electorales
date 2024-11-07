@@ -454,6 +454,10 @@ class Apportionment:
             district_parties_with_quota == len(self.parties)
         ).sum()
 
+        self.plot_parliament()
+        self.plot_quota_diff(sort_vote_share=True)
+        plt.show()
+
         print(
             f"""RESUMEN DE ESTADÍSTICAS:
 
@@ -491,7 +495,3 @@ Distritos donde todos los partidos cumplen quota: {
 }/{len(self.districts)}
 """
         )
-
-        fig_quota = self.plot_quota_diff(sort_vote_share=True)
-        fig_parliament = self.plot_parliament()
-        plt.show()

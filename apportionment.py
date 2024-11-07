@@ -41,8 +41,8 @@ class Apportionment:
     ):
         """
         Receives:
-        - `results`: a dataframe with five columns: `candidate`, `pact`,
-            `party`, `district`, and `votes`.
+        - `results`: a dataframe with six columns: `candidate`, `pact`,
+            `party`, `district`, `votes` and `percentage`.
         - `district_fixed_seats`: a series with districts on its indices, 
             and the number of guaranteed seats per district as values.
         - `colors`: a series with parties on its indices, and a
@@ -92,23 +92,6 @@ class Apportionment:
         self.colors = colors
 
         self.pacts = self.results["pact"].drop_duplicates().to_list()
-
-        # add percentage of votes (of their district) to each candidate
-        district_votes = (
-            self.results.groupby("district")["votes"]
-            .sum()
-            .rename("district_votes")
-        )
-        self.results = self.results.merge(
-            district_votes,
-            how="inner",
-            left_on="district",
-            right_on=district_votes.index
-        )
-        self.results["percentage"] = (
-            self.results["votes"] / self.results["district_votes"]
-        )
-        self.results = self.results.drop(columns="district_votes")
 
         # district-party data
         self.district_party_votes = groupby_sum_and_pivot(

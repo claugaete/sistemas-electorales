@@ -17,7 +17,7 @@ def appoint_divisor(
     - `district_seats`: a series that assigns a number of seats for each
         district.
     - `type`: whether the assignment should be done using D'Hondt/Jefferson or
-        Sainte-Lague/Webster.
+        Sainte-Laguë/Webster.
     - `party_threshold`: minimum percentage of votes a party must receive to be
         eligible for seat allocation. Must be between 0 and 1.
     - `selection_criteria`: criteria by which the candidates for each party
@@ -38,15 +38,15 @@ def appoint_divisor(
     
     # copy of the original array, sorting by votes and adding an extra column
     # for results
-    votes = df.copy().sort_values(
+    results = df.copy().sort_values(
         by=["district", "pact", "party", selection_criteria[0]],
         ascending=[True, True, True, selection_criteria[1]]
     )
-    votes["valid"] = True
-    votes["elected"] = False
+    results["valid"] = True
+    results["elected"] = False
     
     # calculate national vote percentages for parties
-    national_votes_party = votes.groupby(
+    national_votes_party = results.groupby(
         ["pact", "party"]
     )["votes"].sum()
     percentage_party = national_votes_party / national_votes_party.sum()
@@ -56,7 +56,7 @@ def appoint_divisor(
     for pact, party in national_votes_party.index:
         
         if percentage_party[(pact, party)] < party_threshold:
-            votes.loc[votes[votes["party"] == party].index, "valid"] = False
+            results.loc[results[results["party"] == party].index, "valid"] = False
 
     for district in district_seats.index:
         
@@ -64,7 +64,7 @@ def appoint_divisor(
         n_seats = district_seats[district]
         
         # candidates in district
-        votes_district = votes[votes["district"]==district]
+        votes_district = results[results["district"]==district]
         
         # votes for each pact and party
         votes_pact = votes_district.groupby("pact")["votes"].sum()
@@ -94,11 +94,11 @@ def appoint_divisor(
             try:
                 # choose the candidate with the most votes in the party
                 # (among the candidates whose party is above the threshold)
-                chosen_candidate_idx = votes[
-                    (votes["district"] == district)
-                    & (votes["party"] == chosen_party)
-                    & (votes["elected"] == False)
-                    & (votes["valid"] == True)
+                chosen_candidate_idx = results[
+                    (results["district"] == district)
+                    & (results["party"] == chosen_party)
+                    & (results["elected"] == False)
+                    & (results["valid"] == True)
                 ].iloc[0, :].name
             except:
                 # if there are valid candidates left in the party, set its
@@ -120,7 +120,7 @@ def appoint_divisor(
 
             
             # add the seat
-            votes.loc[chosen_candidate_idx, "elected"] = True
+            results.loc[chosen_candidate_idx, "elected"] = True
             elected_pact[chosen_pact] += 1
             elected_party[chosen_party] += 1
             
@@ -136,4 +136,4 @@ def appoint_divisor(
 
             n_seats -= 1
     
-    return votes.drop(columns="valid")
+    return results.drop(columns="valid")

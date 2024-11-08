@@ -35,7 +35,6 @@ class Apportionment:
     def __init__(
         self,
         results: pd.DataFrame,
-        district_fixed_seats: pd.Series,
         colors: pd.Series | None = None,
         party_order: list[str] | None = None
     ):
@@ -43,8 +42,6 @@ class Apportionment:
         Receives:
         - `results`: a dataframe with six columns: `candidate`, `pact`,
             `party`, `district`, `votes` and `percentage`.
-        - `district_fixed_seats`: a series with districts on its indices, 
-            and the number of guaranteed seats per district as values.
         - `colors`: a series with parties on its indices, and a
             `matplotlib`-accepted color for each party as values.
         - `party_order`: a list with all the parties in `results`, in any
@@ -105,8 +102,7 @@ class Apportionment:
         ).astype(int)
 
         # district seat data
-        self.district_fixed_seats = district_fixed_seats
-        self.district_real_seats = (
+        self.district_seats = (
             self.results.groupby("district")["elected"].sum()
         )
 
@@ -244,7 +240,7 @@ class Apportionment:
         else:
             expected_seats = (
                 self.district_party_vote_share.loc[district]
-                * self.district_real_seats[district]
+                * self.district_seats[district]
             )
             results = self.district_party_results.loc[district]
 
@@ -398,10 +394,9 @@ class Apportionment:
         )[list(column_names.values())[1:]]
         worst_winners["Votos (%)"] *= 100
 
-        extra_seats = (self.district_real_seats - self.district_fixed_seats)
-        extra_seat_distribution = (
-            extra_seats
-            .groupby(extra_seats)
+        seat_distribution = (
+            self.district_seats
+            .groupby(self.district_seats)
             .count()
             .to_string()
         )
@@ -467,9 +462,9 @@ Candidatos con menos votos que fueron electos:
 Candidatos con más votos que no fueron electos:
 {best_losers}
 
-Número de distritos por cantidad de escaños extra:
-N° escaños extra / N° distritos
-{extra_seat_distribution}
+Distritos por cantidad de escaños obtenidos:
+N° escaños / N° distritos
+{seat_distribution}
 
 Disproporcionalidad nacional:
 - Gallagher (partidos): {gallagher_parties:.2f}%

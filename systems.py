@@ -137,3 +137,40 @@ def appoint_divisor(
             n_seats -= 1
     
     return results.drop(columns="valid")
+
+
+def appoint_divisor_national(
+    df: pd.DataFrame,
+    total_seats: int,
+    type: Literal["dhondt", "sainte-lague"] = "dhondt",
+    party_threshold: float = 0.0,
+    selection_criteria: tuple[str, bool] = ("percentage", False)
+):
+    """
+    Appoints seats to pacts and parties on a national level using some divisor
+    method (D'Hondt/Jefferson or Sainte-Laguë/Webster). Seats are assigned
+    within each party based on the order given by `selection_criteria`
+    (defaults to percentage obtained by each candidate in their district,
+    in order to not benefit larger districts).
+    
+    Receives same parameters as the district-level divisor method, only with
+    the total number of seats to allocate instead of the district-level
+    distribution.
+    """
+    
+    # save original districts and assign everyone to one "big" district
+    candidate_districts = df["district"]
+    df_unified = df.copy()
+    df_unified["district"] = 1
+    
+    results = appoint_divisor(
+        df_unified,
+        pd.Series({1: total_seats}),
+        type,
+        party_threshold,
+        selection_criteria
+    )
+    
+    results["district"] = candidate_districts
+    
+    return results

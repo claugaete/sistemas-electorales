@@ -8,14 +8,15 @@ def appoint_divisor(
     district_seats: pd.Series,
     type: Literal["dhondt", "sainte-lague"] = "dhondt",
     party_threshold: float = 0.0,
-    selection_criteria: tuple[str, bool] = ("votes", False)
+    selection_criteria: tuple[str, bool] = ("votes", False),
+    reset_votes: bool = True
 ) -> pd.DataFrame:
     """
     Receives:
     - `df`: a dataframe with candidate information; it must have at least 4
-    columns: `district`, `pact`, `party`, and `votes`.
-    - `district_seats`: a series that assigns a number of seats for each
-        district.
+        columns: `district`, `pact`, `party`, and `votes`.
+    - `district_seats`: a series containing the number of new seats to be
+        assigned to each district.
     - `type`: whether the assignment should be done using D'Hondt/Jefferson or
         Sainte-Laguë/Webster.
     - `party_threshold`: minimum percentage of votes a party must receive to be
@@ -24,9 +25,13 @@ def appoint_divisor(
         will be sorted and selected. First element of the tuple is the column
         name, second element is whether the sort is ascending or not. Defaults
         to sorting by the number of votes (descending).
+    - `reset_votes`: whether to create an `elected` column (or modify the
+        existing one) so that every candidate starts as not elected. If this
+        argument is False, then the `elected` column must already exist in the
+        dataframe, and already elected candidates will be ignored.
     
-    Returns: a copy of `df` with an extra column `elected`, that says whether
-        each candidate was elected to the parliament or not.
+    Returns: a copy of `df`, where the `elected` column says whether each
+    candidate was elected to the parliament or not.
     """
     
     if type == "dhondt":
@@ -43,7 +48,8 @@ def appoint_divisor(
         ascending=[True, True, True, selection_criteria[1]]
     )
     results["valid"] = True
-    results["elected"] = False
+    if reset_votes:
+        results["elected"] = False
     
     # calculate national vote percentages for parties
     national_votes_party = results.groupby(
@@ -56,7 +62,9 @@ def appoint_divisor(
     for pact, party in national_votes_party.index:
         
         if percentage_party[(pact, party)] < party_threshold:
-            results.loc[results[results["party"] == party].index, "valid"] = False
+            results.loc[
+                results[results["party"] == party].index, "valid"
+            ] = False
 
     for district in district_seats.index:
         
@@ -144,7 +152,8 @@ def appoint_divisor_national(
     total_seats: int,
     type: Literal["dhondt", "sainte-lague"] = "dhondt",
     party_threshold: float = 0.0,
-    selection_criteria: tuple[str, bool] = ("percentage", False)
+    selection_criteria: tuple[str, bool] = ("percentage", False),
+    reset_votes: bool = True
 ):
     """
     Appoints seats to pacts and parties on a national level using some divisor
@@ -168,7 +177,8 @@ def appoint_divisor_national(
         pd.Series({1: total_seats}),
         type,
         party_threshold,
-        selection_criteria
+        selection_criteria,
+        reset_votes
     )
     
     results["district"] = candidate_districts

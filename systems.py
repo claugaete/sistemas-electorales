@@ -3,7 +3,7 @@ import numpy as np
 from typing import Literal
 
 
-def appoint_divisor(
+def appoint_divisor_district(
     df: pd.DataFrame,
     district_seats: pd.Series,
     type: Literal["dhondt", "sainte-lague"] = "dhondt",
@@ -28,7 +28,8 @@ def appoint_divisor(
     - `reset_votes`: whether to create an `elected` column (or modify the
         existing one) so that every candidate starts as not elected. If this
         argument is False, then the `elected` column must already exist in the
-        dataframe, and already elected candidates will be ignored.
+        dataframe, and already elected candidates will be considered for the
+        starting coefficients.
     
     Returns: a copy of `df`, where the `elected` column says whether each
     candidate was elected to the parliament or not.
@@ -78,16 +79,15 @@ def appoint_divisor(
         votes_pact = votes_district.groupby("pact")["votes"].sum()
         votes_party = votes_district.groupby(["pact", "party"])["votes"].sum()
         
-        # d'hondt coefficient for each pact and party
-        coef_pact = votes_pact.copy().astype(float)
-        coef_party = votes_party.copy().astype(float)
-        
         # number of seats for each pact and party
-        elected_pact = pd.Series([0]*len(votes_pact), index=votes_pact.index)
-        elected_party = pd.Series(
-            [0]*len(votes_party),
-            index=votes_party.index.levels[1]
-        )
+        elected_pact = votes_district.groupby("pact")["elected"].sum()
+        elected_party = votes_district.groupby(
+            ["pact", "party"]
+        )["elected"].sum()
+        
+        # d'hondt coefficient for each pact and party
+        coef_pact = votes_pact / denominator(elected_pact)
+        coef_party = votes_party / denominator(elected_party)
         
         while n_seats > 0:
             
@@ -130,7 +130,7 @@ def appoint_divisor(
             # add the seat
             results.loc[chosen_candidate_idx, "elected"] = True
             elected_pact[chosen_pact] += 1
-            elected_party[chosen_party] += 1
+            elected_party[(chosen_pact, chosen_party)] += 1
             
             # update coefficients
             coef_pact[chosen_pact] = (
@@ -139,7 +139,7 @@ def appoint_divisor(
             )
             coef_party[(chosen_pact, chosen_party)] = (
                 votes_party[chosen_pact][chosen_party]
-                / denominator(elected_party[chosen_party])
+                / denominator(elected_party[(chosen_pact, chosen_party)])
             )
 
             n_seats -= 1
@@ -172,7 +172,7 @@ def appoint_divisor_national(
     df_unified = df.copy()
     df_unified["district"] = 1
     
-    results = appoint_divisor(
+    results = appoint_divisor_district(
         df_unified,
         pd.Series({1: total_seats}),
         type,
@@ -184,3 +184,64 @@ def appoint_divisor_national(
     results["district"] = candidate_districts
     
     return results
+
+
+def appoint_divisor_mixed(
+    df: pd.DataFrame,
+    fixed_district_seats: pd.Series,
+    top_up_seats: int,
+    district_type: Literal["dhondt", "sainte-lague"] = "dhondt",
+    national_type: Literal["dhondt", "sainte-lague"] = "dhondt",
+    district_party_threshold: float = 0.0,
+    national_party_threshold: float = 0.0,
+    district_selection_criteria: tuple[str, bool] = ("votes", False),
+    national_selection_criteria: tuple[str, bool] = ("percentage", False),
+    reset_votes: bool = True
+):
+    """
+    Appoints seats to pacts and parties using a mixed divisor method.
+    
+    Firstly, a fixed number of seats are assigned to each district according to
+    `district_fixed_seats`, using the `district_type` divisor method, with a
+    certain threshold and criteria for selecting candidates.
+    
+    Afterwards, an extra number of "top-up" seats are assigned using a second
+    divisor method on a national scale (with its own threshold), using possibly
+    different criteria for selecting candidates.
+    
+    Returns a copy of `df`, where the `elected` column says whether each
+    candidate was elected to the parliament or not, and the `how` column
+    indicates the way each candidate was elected (district-level assignment or
+    national-level assignment).
+    """
+
+    # firstly, assign district-level seats
+    district_results = appoint_divisor_district(
+        df,
+        district_seats=fixed_district_seats,
+        type=district_type,
+        party_threshold=district_party_threshold,
+        selection_criteria=district_selection_criteria,
+        reset_votes=reset_votes
+    )
+    district_results["how"] = ""
+    district_results.loc[
+        district_results["elected"]==True, "how"
+    ] = "district"
+    
+    # then allocate national-level seats using the new coefficients
+    national_results = appoint_divisor_national(
+        district_results,
+        total_seats=top_up_seats,
+        type=national_type,
+        party_threshold=national_party_threshold,
+        selection_criteria=national_selection_criteria,
+        reset_votes=False
+    )
+    national_results.loc[
+        (national_results["elected"]==True) & (national_results["how"]==""),
+        "how"
+    ] = "national"
+    
+    return national_results
+    

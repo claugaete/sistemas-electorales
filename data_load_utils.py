@@ -33,7 +33,6 @@ def redistrict_candidates(df: pd.DataFrame, subdistricts: pd.Series):
     """
     
     df_mod = df.copy()
-    df_mod = df_mod.rename({"district": "district_old"})
     df_mod["district"] = ""
     
     max_n_districts = subdistricts.max()

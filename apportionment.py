@@ -253,28 +253,6 @@ class Apportionment:
             ),
         }, index=self.parties)
 
-    def quota_condition_districts(self) -> pd.DataFrame:
-        """
-        Checks the quota rule for each party at district level, and counts
-        the number of parties in each district that meet (and don't meet) the
-        rule.
-        """
-
-        n_parties = len(self.parties)
-
-        n_parties_with_quota = pd.Series(
-            [
-                self.quota_condition(d)["meets_quota"].sum()
-                for d in self.districts
-            ],
-            index=self.districts
-        )
-
-        return pd.DataFrame({
-            "parties_with_quota": n_parties_with_quota,
-            "parties_without_quota": n_parties - n_parties_with_quota
-        }, index=self.districts)
-
     # plots
     def plot_quota_diff(self, sort_vote_share=False):
         """
@@ -443,14 +421,6 @@ class Apportionment:
             )
         }).describe().loc[["min", "mean", "max"]]
 
-        parties_meet_quota = self.quota_condition()["meets_quota"].sum()
-        district_parties_with_quota = self.quota_condition_districts()[
-            "parties_with_quota"
-        ]
-        districts_meet_quota = (
-            district_parties_with_quota == len(self.parties)
-        ).sum()
-
         self.plot_parliament()
         self.plot_quota_diff(sort_vote_share=True)
         plt.show()
@@ -483,11 +453,5 @@ Fragmentación:
 - Número efectivo de partidos: {self.effective_num_parties():.2f}
 - Número de pactos: {(self.pact_results > 0).sum()}
 - Número efectivo de pactos: {self.effective_num_parties(use_pacts=True):.2f}
-
-Quotas:
-Partidos que cumplen quota: {parties_meet_quota}/{len(self.parties)}
-Distritos donde todos los partidos cumplen quota: {
-    districts_meet_quota
-}/{len(self.districts)}
 """
         )

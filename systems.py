@@ -1,6 +1,53 @@
 import pandas as pd
 import numpy as np
-from typing import Literal
+from typing import Literal, Callable
+
+
+def assign_seats_to_parties(
+    party_counts: pd.Series,
+    total_seats: int,
+    initial_seats: pd.Series,
+    denominator: Callable[[pd.Series], pd.Series]
+) -> pd.Series:
+    """
+    Assigns seats to parties (could also be pacts, or districts) according to
+    an arbitrary divisor method. This function DOES NOT assign seats to
+    individual candidates, nor account for the possibility that a party might
+    be ineligible to obtain the number of seats it deserves according to the
+    used method (for that, use one of the `appoint_divisor` functions).
+    
+    Receives:
+    - `party_counts`: the "numerator" for each of the party's coefficients.
+        Usually the number of votes received by each party, but it can be
+        something else.
+    - `total_seats`: total number of seats to assign; this figure INCLUDES
+        the already assigned seats from `initial_seats`.
+    - `initial_seats`: number of seats that each party starts with.
+    - `denominator`: function to use as the denominator to calculate each
+        party's coefficients. Receives a series (the number of already assigned
+        seats for each party) and must return a series with the same index.
+        
+    Returns: a series with the total number of seats assigned to each party.
+    """
+    
+    # series to save allocation in
+    results = initial_seats.copy()
+    
+    # discount already allocated seats
+    total_seats -= initial_seats.sum()
+    
+    while total_seats > 0:
+        
+        # calculate coefficients
+        coefs = party_counts / denominator(results)
+        
+        # select max element and add seat
+        chosen_party = coefs.idxmax()
+        results.loc[chosen_party] += 1
+        
+        total_seats -= 1
+        
+    return results
 
 
 def appoint_divisor_district(
@@ -92,12 +139,10 @@ def appoint_divisor_district(
         while n_seats > 0:
             
             # choose the pact with highest coefficient
-            chosen_pact_idx = coef_pact.argmax()
-            chosen_pact = coef_pact.index[chosen_pact_idx]
+            chosen_pact = coef_pact.idxmax()
             
             # choose the party in the pact with highest coefficient
-            chosen_party_idx = coef_party[chosen_pact].argmax()
-            chosen_party = coef_party[chosen_pact].index[chosen_party_idx]
+            chosen_party = coef_party[chosen_pact].idxmax()
             
             try:
                 # choose the candidate with the most votes in the party
@@ -109,7 +154,7 @@ def appoint_divisor_district(
                     & (results["valid"] == True)
                 ].iloc[0, :].name
             except:
-                # if there are valid candidates left in the party, set its
+                # if there are no valid candidates left in the party, set its
                 # coefficient to 0
                 coef_party[(chosen_pact, chosen_party)] = 0
                 

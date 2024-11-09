@@ -398,7 +398,9 @@ class Apportionment:
             self.district_seats
             .groupby(self.district_seats)
             .count()
-            .to_string()
+            .reset_index(name="N° distritos")
+            .rename(columns={"elected": "N° escaños"})
+            .to_string(index=False)
         )
 
         gallagher_parties = self.disproportionality_national(
@@ -439,7 +441,7 @@ class Apportionment:
             'wasted-pactos': self.disproportionality_districts(
                 type="wasted-pct", use_pacts=True
             )
-        }).describe().loc[["mean", "std", "min", "50%", "max"]]
+        }).describe().loc[["min", "mean", "max"]]
 
         parties_meet_quota = self.quota_condition()["meets_quota"].sum()
         district_parties_with_quota = self.quota_condition_districts()[
@@ -463,7 +465,6 @@ Candidatos con más votos que no fueron electos:
 {best_losers}
 
 Distritos por cantidad de escaños obtenidos:
-N° escaños / N° distritos
 {seat_distribution}
 
 Disproporcionalidad nacional:

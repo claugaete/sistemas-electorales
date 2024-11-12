@@ -18,7 +18,7 @@ analizado):
 
 - Proporcional por distrito
     - D'Hondt estándar (actualmente usado)
-    - *D'Hondt con umbral nacional (actualmente en discusión)*
+    - D'Hondt con umbral nacional (actualmente en discusión)
     - *D'Hondt sin pactos*
 - *Proporcional nacional*
     - *D'Hondt nacional*

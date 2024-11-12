@@ -346,6 +346,8 @@ class Apportionment:
         graphs.
         """
         
+        median_candidate_percentage = self.results[self.results["elected"]]["percentage"].median()*100
+        
         column_names = {
             "candidate": "Candidato",
             "pact": "Pacto",
@@ -427,6 +429,8 @@ class Apportionment:
 
         print(
             f"""RESUMEN DE ESTADÍSTICAS:
+            
+Mediana de votación para candidatos electos: {median_candidate_percentage:.2f}%
 
 Candidatos con menos votos que fueron electos:
 {worst_winners}

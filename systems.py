@@ -53,7 +53,7 @@ def assign_seats_to_parties(
 def appoint_divisor_district(
     df: pd.DataFrame,
     district_seats: pd.Series,
-    type: Literal["dhondt", "sainte-lague"] = "dhondt",
+    assign_type: Literal["dhondt", "sainte-lague", "insane"] = "dhondt",
     party_threshold: float = 0.0,
     selection_criteria: tuple[str, bool] = ("votes", False),
     reset_votes: bool = True
@@ -64,8 +64,8 @@ def appoint_divisor_district(
         columns: `district`, `pact`, `party`, and `votes`.
     - `district_seats`: a series containing the number of new seats to be
         assigned to each district.
-    - `type`: whether the assignment should be done using D'Hondt/Jefferson or
-        Sainte-Laguë/Webster.
+    - `assgin_type`: whether the assignment should be done using
+        D'Hondt/Jefferson or Sainte-Laguë/Webster.
     - `party_threshold`: minimum percentage of votes a party must receive to be
         eligible for seat allocation. Must be between 0 and 1.
     - `selection_criteria`: criteria by which the candidates for each party
@@ -82,12 +82,12 @@ def appoint_divisor_district(
     candidate was elected to the parliament or not.
     """
     
-    if type == "dhondt":
+    if assign_type == "dhondt":
         denominator = lambda x: x + 1
-    elif type == "sainte-lague":
+    elif assign_type == "sainte-lague":
         denominator = lambda x: 2 * x + 1
     else:
-        raise ValueError(type)
+        raise ValueError(assign_type)
     
     # copy of the original array, sorting by votes and adding an extra column
     # for results
@@ -195,7 +195,7 @@ def appoint_divisor_district(
 def appoint_divisor_national(
     df: pd.DataFrame,
     total_seats: int,
-    type: Literal["dhondt", "sainte-lague"] = "dhondt",
+    assign_type: Literal["dhondt", "sainte-lague"] = "dhondt",
     party_threshold: float = 0.0,
     selection_criteria: tuple[str, bool] = ("percentage", False),
     reset_votes: bool = True
@@ -220,7 +220,7 @@ def appoint_divisor_national(
     results = appoint_divisor_district(
         df_unified,
         pd.Series({1: total_seats}),
-        type,
+        assign_type,
         party_threshold,
         selection_criteria,
         reset_votes
@@ -264,7 +264,7 @@ def appoint_divisor_mixed(
     district_results = appoint_divisor_district(
         df,
         district_seats=fixed_district_seats,
-        type=district_type,
+        assign_type=district_type,
         party_threshold=district_party_threshold,
         selection_criteria=district_selection_criteria,
         reset_votes=reset_votes
@@ -278,7 +278,7 @@ def appoint_divisor_mixed(
     national_results = appoint_divisor_national(
         district_results,
         total_seats=top_up_seats,
-        type=national_type,
+        assign_type=national_type,
         party_threshold=national_party_threshold,
         selection_criteria=national_selection_criteria,
         reset_votes=False

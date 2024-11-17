@@ -200,6 +200,10 @@ class Apportionment:
 
         # normalize results for each district
         results = results.div(results.sum(axis=1), axis=0)
+        
+        # edge case, when a district doesn't get any representation, all their
+        # results need to be 0
+        results = results.fillna(0)
 
         if type == "gallagher":
             return np.sqrt(np.sum(np.square(expected - results), axis=1) / 2)

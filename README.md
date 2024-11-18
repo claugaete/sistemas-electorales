@@ -20,10 +20,9 @@ analizado):
     - D'Hondt estándar (actualmente usado)
     - D'Hondt con umbral nacional (actualmente en discusión)
     - D'Hondt sin pactos
-- *Proporcional nacional*
-    - *D'Hondt nacional*
-    - *D'Hondt nacional con umbral electoral*
-    - *D'Hondt nacional sin pactos*
+- Proporcional nacional
+    - D'Hondt nacional con umbral bajo
+    - D'Hondt nacional con umbral alto
 - *Bipartidistas*
     - *Binomial*
     - *Uninominal (first-past-the-post)*

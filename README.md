@@ -23,9 +23,9 @@ analizado):
 - Proporcional nacional
     - D'Hondt nacional con umbral bajo
     - D'Hondt nacional con umbral alto
-- *Bipartidistas*
-    - *Binomial*
-    - *Uninominal (first-past-the-post)*
+- Bipartidistas
+    - Binomial
+    - Uninominal (first-past-the-post)
 - *Mixtos*
     - *Mixed-Member Proportional / Additional Member System*
     - *D'Hondt con escaños niveladores*

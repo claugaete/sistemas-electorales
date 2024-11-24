@@ -1,6 +1,8 @@
 import pandas as pd
 import numpy as np
+from scipy.optimize import root
 from typing import Literal, Callable
+from apportionment import Apportionment
 
 
 def assign_seats_to_parties(
@@ -289,4 +291,174 @@ def appoint_divisor_mixed(
     ] = "national"
     
     return national_results
+
+
+def fix_divisors(
+    results: pd.DataFrame,
+    assignment: pd.DataFrame,
+    divisors: pd.Series,
+    correct: pd.Series,
+    assign_type: Literal["dhondt", "sainte-lague"] = "dhondt"
+):
+    """
+    Modifies `assignment` and `divisors` so that, for each row, all ratios
+    between `results` and that row's divisor (when rounded appropriately
+    accordinf to `assign_type`), are equal to `assignment`, and the sum of the
+    entire row is equal to it's `correct` value.
+    """
+
+    # hi/lo are auxiliary constants for determining how big the votes/divisor
+    # quotient must be in order to get one more (or one fewer) seat. it
+    # deppends on the divisor method you are using (rounding with sainte-lague,
+    # floor function with d'hondt)
+    if assign_type == "dhondt":
+        hi, lo = 1, 0
+        rounder = np.floor
+    elif assign_type == "sainte-lague":
+        hi, lo = 0.5, -0.5
+        rounder = np.round
+
+    # go over each row individually
+    for idx, result in results.iterrows():
+
+        # whether we need more or fewer seats
+        more_seats = assignment.loc[idx].sum() < correct[idx]
+
+        # while the assignment is incorrect
+        while assignment.loc[idx].sum() != correct[idx]:
+
+            # determines how big (or how small) the votes/divisor quotient must
+            # be in order to get one more (or one fewer) seat for each element
+            next_seats = np.maximum(
+                np.floor(result / divisors[idx]) + (hi if more_seats else lo),
+                0  # no negative seats allowed
+            )
+
+            # calculates the divisor for each element (remembering that:
+            # result / divisor = number of seats)
+            next_divisors = (result / next_seats)
+            
+            # remove nan or infinite divisors, and sort the rest
+            candidates = next_divisors[np.isfinite(next_divisors)].sort_values(
+                ascending = not more_seats
+            )
+
+            # set the row divisor as the mean between the two largest (or
+            # smallest) divisors needed two get one more (or one fewer) seat,
+            # so we can make sure that only one seat is relocated
+            new_divisor = (candidates.iloc[0] + candidates.iloc[1])/2
+
+            # update assignment and divisor
+            divisors.loc[idx] = new_divisor
+            assignment.loc[idx] = rounder(result / new_divisor)
+
+
+def appoint_biproportional(
+    df: pd.DataFrame,
+    district_seats: pd.Series,
+    assign_type: Literal["dhondt", "sainte-lague"] = "dhondt",
+    party_threshold: float = 0.0,
+    selection_criteria: tuple[str, bool] = ("votes", False),
+    reset_votes: bool = True
+):
     
+    if assign_type == "dhondt":
+        rounder = np.floor
+        denominator = lambda x: x + 1
+    elif assign_type == "sainte-lague":
+        rounder = np.round
+        denominator = lambda x: 2 * x + 1
+    else:
+        raise ValueError(assign_type)
+    
+    # copy of the original array, sorting by votes and adding an extra column
+    # for results
+    results = df.copy().sort_values(
+        by=["district", "pact", "party", selection_criteria[0]],
+        ascending=[True, True, True, selection_criteria[1]]
+    )
+    if reset_votes:
+        results["elected"] = False
+    
+    
+    # create empty Apportionment object to facilitate auxiliary dataframe
+    # creation
+    app = Apportionment(results)
+    party_vote_share = app.party_vote_share
+    district_party_votes = app.district_party_votes
+    
+    # remove parties below the threshold
+    party_vote_share[party_vote_share < party_threshold] = 0
+    
+    # assign party seats using defined system
+    upper_apportionment = assign_seats_to_parties(
+        party_counts=party_vote_share,
+        total_seats=district_seats.sum(),
+        initial_seats=pd.Series(
+            [0]*len(party_vote_share),
+            index=party_vote_share.index
+        ),
+        denominator=denominator
+    )
+    
+    # initialize divisors
+    district_votes = results.groupby("district")["votes"].sum()
+    district_divisors = rounder(district_votes / district_seats)
+    party_divisors = pd.Series(
+        [1]*len(party_vote_share),
+        index=party_vote_share.index
+    )
+    
+    # calculate initial assingment
+    assignment = rounder(
+        district_party_votes.div(
+            district_divisors, axis=0
+        ).div(
+            party_divisors, axis=1
+        )
+    )
+    
+    # iterate until assignment is good
+    while True:
+        
+        # if party assignment is wrong, fix divisors
+        if (assignment.sum(axis=0) != upper_apportionment).any():
+            fix_divisors(
+                district_party_votes.div(district_divisors, axis=0).T,
+                assignment.T,
+                party_divisors,
+                upper_apportionment,
+                assign_type
+            )
+        
+        # if district assignment is wrong, fix divisors
+        elif (assignment.sum(axis=1) != district_seats).any():
+            fix_divisors(
+                district_party_votes.div(party_divisors, axis=1),
+                assignment,
+                district_divisors,
+                district_seats,
+                assign_type
+            )
+
+        else:
+            break
+    
+    print(district_divisors)
+    print(party_divisors)
+    return assignment
+
+df = pd.read_csv("datos.csv", index_col=0)
+district_seats = pd.Series(
+    np.array(
+        [3, 3, 5, 5, 7, 8, 8, 8, 7, 8, 6, 7, 5, 6,
+        5, 4, 7, 4, 5, 8, 5, 4, 7, 5, 4, 5, 3, 3]
+    ),
+    index=range(1, 29)
+)
+elections_bi = appoint_biproportional(
+    df,
+    district_seats,
+    "dhondt"
+)
+print(elections_bi.loc[:, "CS"])

@@ -330,7 +330,7 @@ def fix_divisors(
             # determines how big (or how small) the votes/divisor quotient must
             # be in order to get one more (or one fewer) seat for each element
             next_seats = np.maximum(
-                np.floor(result / divisors[idx]) + (hi if more_seats else lo),
+                rounder(result / divisors[idx]) + (hi if more_seats else lo),
                 0  # no negative seats allowed
             )
 
@@ -459,6 +459,6 @@ district_seats = pd.Series(
 elections_bi = appoint_biproportional(
     df,
     district_seats,
-    "dhondt"
+    "sainte-lague"
 )
 print(elections_bi.loc[:, "CS"])

@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-from scipy.optimize import root
 from typing import Literal, Callable
 from apportionment import Apportionment
 
@@ -386,9 +385,18 @@ def appoint_biproportional(
     app = Apportionment(results)
     party_vote_share = app.party_vote_share
     district_party_votes = app.district_party_votes
+    district_party_vote_share = app.district_party_vote_share
     
     # remove parties below the threshold
-    party_vote_share[party_vote_share < party_threshold] = 0
+    parties_to_remove = party_vote_share.loc[
+        party_vote_share < party_threshold
+    ].index.to_list()
+    party_vote_share = party_vote_share.drop(
+        parties_to_remove
+    )
+    district_party_votes = district_party_votes.drop(
+        columns=parties_to_remove
+    )
     
     # assign party seats using defined system
     upper_apportionment = assign_seats_to_parties(
@@ -405,8 +413,8 @@ def appoint_biproportional(
     district_votes = results.groupby("district")["votes"].sum()
     district_divisors = rounder(district_votes / district_seats)
     party_divisors = pd.Series(
-        [1]*len(party_vote_share),
-        index=party_vote_share.index
+        [1.0]*len(district_party_votes.columns),
+        index=district_party_votes.columns
     )
     
     # calculate initial assingment
@@ -443,22 +451,25 @@ def appoint_biproportional(
 
         else:
             break
-    
-    print(district_divisors)
-    print(party_divisors)
-    return assignment
 
-df = pd.read_csv("datos.csv", index_col=0)
-district_seats = pd.Series(
-    np.array(
-        [3, 3, 5, 5, 7, 8, 8, 8, 7, 8, 6, 7, 5, 6,
-        5, 4, 7, 4, 5, 8, 5, 4, 7, 5, 4, 5, 3, 3]
-    ),
-    index=range(1, 29)
-)
-elections_bi = appoint_biproportional(
-    df,
-    district_seats,
-    "sainte-lague"
-)
-print(elections_bi.loc[:, "CS"])
+    assignment = assignment.astype(int)
+    
+    # for each district-party combination
+    for district, row in assignment.iterrows():
+        for party, seats in row.items():
+            
+            # select the appropriate amount of candidates
+            candidates_to_elect = results.loc[
+                (results["district"] == district)
+                & (results["party"] == party),
+                "elected"
+            ].head(seats)
+            
+            # elect them
+            results.loc[
+                candidates_to_elect.index,
+                "elected"
+            ] = True
+    
+    return results
+

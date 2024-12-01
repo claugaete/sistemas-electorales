@@ -29,4 +29,4 @@ analizado):
 - Sistema biproporcional
 - Mixtos
     - Mixed-Member Proportional / Additional-Member System
-    - *D'Hondt con escaños niveladores*
+    - D'Hondt con escaños niveladores

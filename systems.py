@@ -54,7 +54,10 @@ def assign_seats_to_parties(
 def appoint_divisor_district(
     df: pd.DataFrame,
     district_seats: pd.Series,
-    assign_type: Literal["dhondt", "sainte-lague", "insane"] = "dhondt",
+    assign_type: (
+        Literal["dhondt", "sainte-lague", "insane"]
+        | Callable[[pd.Series], pd.Series]
+    ) = "dhondt",
     party_threshold: float = 0.0,
     selection_criteria: tuple[str, bool] = ("votes", False),
     reset_votes: bool = True
@@ -83,7 +86,9 @@ def appoint_divisor_district(
     candidate was elected to the parliament or not.
     """
     
-    if assign_type == "dhondt":
+    if type(assign_type) == function:
+        denominator = assign_type
+    elif assign_type == "dhondt":
         denominator = lambda x: x + 1
     elif assign_type == "sainte-lague":
         denominator = lambda x: 2 * x + 1
@@ -196,7 +201,10 @@ def appoint_divisor_district(
 def appoint_divisor_national(
     df: pd.DataFrame,
     total_seats: int,
-    assign_type: Literal["dhondt", "sainte-lague"] = "dhondt",
+    assign_type: (
+        Literal["dhondt", "sainte-lague", "insane"]
+        | Callable[[pd.Series], pd.Series]
+    ) = "dhondt",
     party_threshold: float = 0.0,
     selection_criteria: tuple[str, bool] = ("percentage", False),
     reset_votes: bool = True
@@ -236,8 +244,14 @@ def appoint_divisor_mixed(
     df: pd.DataFrame,
     fixed_district_seats: pd.Series,
     top_up_seats: int,
-    district_type: Literal["dhondt", "sainte-lague"] = "dhondt",
-    national_type: Literal["dhondt", "sainte-lague"] = "dhondt",
+    district_type: (
+        Literal["dhondt", "sainte-lague", "insane"]
+        | Callable[[pd.Series], pd.Series]
+    ) = "dhondt",
+    national_type: (
+        Literal["dhondt", "sainte-lague", "insane"]
+        | Callable[[pd.Series], pd.Series]
+    ) = "dhondt",
     district_party_threshold: float = 0.0,
     national_party_threshold: float = 0.0,
     district_selection_criteria: tuple[str, bool] = ("votes", False),

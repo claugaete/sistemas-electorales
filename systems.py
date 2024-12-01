@@ -360,6 +360,19 @@ def appoint_biproportional(
     selection_criteria: tuple[str, bool] = ("votes", False),
     reset_votes: bool = True
 ):
+    """
+    Appoints seats to pacts and parties using a biproportional method.
+    
+    Seats are assigned to parties above `party_threshold` using the specified
+    method; afterwards, divisors for each party and district are iteratively
+    modified until an appropriate assignment has been reached (where each party
+    and each district has the correct number of representatives).
+    
+    This method does not take into account the actual number of candidates a
+    party has in each district; if a party has less candidates than the number
+    of representatives it is assigned in a specific district, then those extra
+    seats are lost.
+    """
     
     if assign_type == "dhondt":
         rounder = np.floor

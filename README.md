@@ -23,7 +23,7 @@ Se analizan los siguientes sistemas:
     - D'Hondt nacional con umbral bajo
     - D'Hondt nacional con umbral alto
 - Bipartidistas
-    - Binomial
+    - Binominal
     - Uninominal (first-past-the-post)
 - Sistema biproporcional
 - Mixtos

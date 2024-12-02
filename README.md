@@ -13,8 +13,7 @@ para ver disproporcionalidad, y de la [cantidad efectiva de
 partidos](https://en.wikipedia.org/wiki/Effective_number_of_parties) para ver
 fragmentación).
 
-Se proponen los siguientes sistemas (en cursiva los que aún no se han
-analizado):
+Se analizan los siguientes sistemas:
 
 - Proporcional por distrito
     - D'Hondt estándar (actualmente usado)
@@ -30,3 +29,9 @@ analizado):
 - Mixtos
     - Mixed-Member Proportional / Additional-Member System
     - D'Hondt con escaños niveladores
+
+Finalmente, en base a los resultados obtenidos en los análisis anteriores, se
+propone un *framework* para un **nuevo sistema electoral**, que permita un
+compromiso entre las características que se buscan en el contexto político
+chileno. Este sistema es analizado un poco más en profundidad mediante el
+ajuste de sus parámetros.

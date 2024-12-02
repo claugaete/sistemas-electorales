@@ -55,7 +55,7 @@ def appoint_divisor_district(
     df: pd.DataFrame,
     district_seats: pd.Series,
     assign_type: (
-        Literal["dhondt", "sainte-lague", "insane"]
+        Literal["dhondt", "sainte-lague"]
         | Callable[[pd.Series], pd.Series]
     ) = "dhondt",
     party_threshold: float = 0.0,
@@ -86,7 +86,7 @@ def appoint_divisor_district(
     candidate was elected to the parliament or not.
     """
     
-    if type(assign_type) == function:
+    if isinstance(assign_type, Callable):
         denominator = assign_type
     elif assign_type == "dhondt":
         denominator = lambda x: x + 1
@@ -202,7 +202,7 @@ def appoint_divisor_national(
     df: pd.DataFrame,
     total_seats: int,
     assign_type: (
-        Literal["dhondt", "sainte-lague", "insane"]
+        Literal["dhondt", "sainte-lague"]
         | Callable[[pd.Series], pd.Series]
     ) = "dhondt",
     party_threshold: float = 0.0,
@@ -245,11 +245,11 @@ def appoint_divisor_mixed(
     fixed_district_seats: pd.Series,
     top_up_seats: int,
     district_type: (
-        Literal["dhondt", "sainte-lague", "insane"]
+        Literal["dhondt", "sainte-lague"]
         | Callable[[pd.Series], pd.Series]
     ) = "dhondt",
     national_type: (
-        Literal["dhondt", "sainte-lague", "insane"]
+        Literal["dhondt", "sainte-lague"]
         | Callable[[pd.Series], pd.Series]
     ) = "dhondt",
     district_party_threshold: float = 0.0,
@@ -500,3 +500,168 @@ def appoint_biproportional(
     
     return results
 
+
+def appoint_swedish(
+    df: pd.DataFrame,
+    fixed_district_seats: pd.Series,
+    top_up_seats: int,
+    district_type: (
+        Literal["dhondt", "sainte-lague"]
+        | Callable[[pd.Series], pd.Series]
+    ) = "dhondt",
+    national_type: (
+        Literal["dhondt", "sainte-lague"]
+        | Callable[[pd.Series], pd.Series]
+    ) = "dhondt",
+    leveling_distribution_type: (
+        Literal["dhondt", "sainte-lague"]
+        | Callable[[pd.Series], pd.Series]
+    ) = "dhondt",
+    district_specific_threshold: float = 0.0,
+    national_threshold: float = 0.0,
+    district_selection_criteria: tuple[str, bool] = ("votes", False),
+    national_selection_criteria: tuple[str, bool] = ("percentage", False),
+    leveling_distribution_criteria: str = "votes",
+    reset_votes: bool = True
+):
+    """
+    Assigns seats using a modified version of the election system used in
+    the Swedish Riksdag.
+    
+    - No pacts are used during the election.
+    - A fixed number of seats are assigned to each district, using the
+      `district_type` method. In each district, only parties that are above
+      `national_threshold` at a national level or above
+      `district_specific_threshold` in the district can take seats.
+    - Taking those seats into account, a number of leveling seats are assigned
+      in order to ensure proportionality. This is done using the
+      `national_type` method, and only parties above `national_threshold` are
+      eligible.
+    - For each party, its leveling seats are assigned to the different
+      districts using the `leveling_distribution_type` method among the
+      districts, with the coefficients being determined by the
+      `leveling_distribution_criteria` (usually number of votes) and the number
+      of seats the party obtained in each district.
+      
+    Returns a copy of `df`, where the `elected` column says whether each
+    candidate was elected to the parliament or not, and the `how` column
+    indicates the way each candidate was elected (district-level assignment or
+    national-level assignment).
+    """
+
+    if isinstance(national_type, Callable):
+        national_denominator = national_type
+    elif national_type == "dhondt":
+        national_denominator = lambda x: x + 1
+    elif national_type == "sainte-lague":
+        national_denominator = lambda x: 2 * x + 1
+    else:
+        raise ValueError(national_type)
+
+    # copy of the original array, adding parties as pacts
+    results = df.copy()
+    results["pact"] = results["party"]
+    results["elected"] = False
+    results["how"] = ""
+
+    # create auxiliary apportionment
+    app = Apportionment(results)
+
+    # parties that are above the national threshold (and cat get seats in all
+    # districts)
+    national_parties = app.party_vote_share[
+        app.party_vote_share > national_threshold
+    ].index.to_list()
+
+    above_threshold_vote_share = app.party_vote_share.copy()
+    above_threshold_vote_share.loc[
+        above_threshold_vote_share < national_threshold
+    ] = 0
+
+    # for each district, remove votes for parties that are below the national
+    # threshold AND below the district threshold in said district
+    for district, row in app.district_party_vote_share.iterrows():
+        for party, pct in row.items():
+            if (
+                pct < district_specific_threshold
+                and party not in national_parties
+            ):
+                results.loc[
+                    (results["district"] == district)
+                    & (results["party"] == party),
+                    "votes"
+                ] = 0
+
+    # assign district-level seats
+    district_results = appoint_divisor_district(
+        results,
+        district_seats=fixed_district_seats,
+        assign_type=district_type,
+        party_threshold=0,
+        selection_criteria=district_selection_criteria,
+        reset_votes=reset_votes
+    )
+    district_results.loc[
+        district_results["elected"]==True, "how"
+    ] = "district"
+
+    # get seats for each party and assign leveling seats
+    fixed_party_seats = district_results.groupby("party")["elected"].sum()
+    final_seats = assign_seats_to_parties(
+        party_counts=above_threshold_vote_share,
+        total_seats=fixed_district_seats.sum() + top_up_seats,
+        initial_seats=fixed_party_seats,
+        denominator=national_denominator
+    )
+
+    # trick: rename district to party (and pact), rename party to district, so
+    # that we can assign each party's extra seats to the districts that deserve
+    # them the most
+    district_results = district_results.rename(
+        columns={"district": "party", "party": "district"}
+    )
+    district_results["pact"] = district_results["district"]
+    district_results["votes"] = district_results[
+        leveling_distribution_criteria
+    ]
+    final_results = appoint_divisor_district(
+        district_results,
+        district_seats=final_seats - fixed_party_seats,
+        assign_type=leveling_distribution_type,
+        party_threshold=0,
+        selection_criteria=national_selection_criteria,
+        reset_votes=False
+    )
+    final_results.loc[
+        (final_results["elected"]==True) & (final_results["how"]==""),
+        "how"
+    ] = "national"
+
+    # rename everything back to normal
+    final_results[
+        ["district", "party", "votes"]
+    ] = df[["district", "party", "votes"]]
+    if "pact" in df.columns:
+        final_results["pact"] = df["pact"]
+
+    return final_results
+
+if __name__ == "__main__":
+    df = pd.read_csv("datos.csv", index_col=0)
+    district_seats = pd.Series(
+        np.array(
+            [3, 3, 5, 5, 7, 8, 8, 8, 7, 8, 6, 7, 5, 6,
+            5, 4, 7, 4, 5, 8, 5, 4, 7, 5, 4, 5, 3, 3]
+        ),
+        index=range(1, 29)
+    )
+    elections_mix = appoint_swedish(
+        df,
+        district_seats,
+        25,
+        "sainte-lague",
+        "sainte-lague",
+        "sainte-lague",
+        0.12,
+        0.04
+    )

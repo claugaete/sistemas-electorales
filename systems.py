@@ -255,7 +255,7 @@ def appoint_divisor_mixed(
     district_party_threshold: float = 0.0,
     national_party_threshold: float = 0.0,
     district_selection_criteria: tuple[str, bool] = ("votes", False),
-    national_selection_criteria: tuple[str, bool] = ("percentage", False),
+    national_selection_criteria: tuple[str, bool] = ("votes", False),
     reset_votes: bool = True
 ):
     """
@@ -520,7 +520,7 @@ def appoint_swedish(
     district_specific_threshold: float = 0.0,
     national_threshold: float = 0.0,
     district_selection_criteria: tuple[str, bool] = ("votes", False),
-    national_selection_criteria: tuple[str, bool] = ("percentage", False),
+    national_selection_criteria: tuple[str, bool] = ("votes", False),
     leveling_distribution_criteria: str = "votes",
     reset_votes: bool = True
 ):
@@ -645,23 +645,3 @@ def appoint_swedish(
         final_results["pact"] = df["pact"]
 
     return final_results
-
-if __name__ == "__main__":
-    df = pd.read_csv("datos.csv", index_col=0)
-    district_seats = pd.Series(
-        np.array(
-            [3, 3, 5, 5, 7, 8, 8, 8, 7, 8, 6, 7, 5, 6,
-            5, 4, 7, 4, 5, 8, 5, 4, 7, 5, 4, 5, 3, 3]
-        ),
-        index=range(1, 29)
-    )
-    elections_mix = appoint_swedish(
-        df,
-        district_seats,
-        25,
-        "sainte-lague",
-        "sainte-lague",
-        "sainte-lague",
-        0.12,
-        0.04
-    )

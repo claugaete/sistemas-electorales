@@ -290,7 +290,7 @@ class Apportionment:
 
         ax.set_xlabel("Partido")
         ax.set_ylabel("Dif. entre escaños reales y esperados")
-        fig.suptitle("Disproporcionalidad entre votación y escaños")
+        fig.suptitle("Desproporcionalidad entre votación y escaños")
 
         return fig
 
@@ -445,7 +445,7 @@ Candidatos con más votos que no fueron electos:
 Distritos por cantidad de escaños obtenidos:
 {seat_distribution}
 
-Disproporcionalidad nacional:
+Desproporcionalidad nacional:
 - Gallagher (partidos): {gallagher_parties:.2f}%
 - Gallagher (pactos): {gallagher_pacts:.2f}%
 - Loosemore-Hanby (partidos): {lh_parties:.2f}%
@@ -453,7 +453,7 @@ Disproporcionalidad nacional:
 - Wasted vote percentage (partidos): {wasted_parties:.2f}%
 - Wasted vote percentage (pactos): {wasted_pacts:.2f}%
 
-Disproporcionalidad por distrito:
+Desproporcionalidad por distrito:
 {district_disp_df}
 
 Fragmentación:

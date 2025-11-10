@@ -60,7 +60,8 @@ def appoint_divisor_district(
     ) = "dhondt",
     party_threshold: float = 0.0,
     selection_criteria: tuple[str, bool] = ("votes", False),
-    reset_votes: bool = True
+    reset_votes: bool = True,
+    reset_valid: bool = True,
 ) -> pd.DataFrame:
     """
     Receives:
@@ -81,6 +82,11 @@ def appoint_divisor_district(
         argument is False, then the `elected` column must already exist in the
         dataframe, and already elected candidates will be considered for the
         starting coefficients.
+    - `reset_valid`: whether to create a `valid` column (or modify the existing
+        one) so that every candidate starts out as being eligible. If this
+        argument is `False`, then the `valid` column must already exist in the
+        dataframe. Candidates where `valid=False` will not be elected, but
+        their votes will be considered towards the party total.
     
     Returns: a copy of `df`, where the `elected` column says whether each
     candidate was elected to the parliament or not.
@@ -101,7 +107,8 @@ def appoint_divisor_district(
         by=["district", "pact", "party", selection_criteria[0]],
         ascending=[True, True, True, selection_criteria[1]]
     )
-    results["valid"] = True
+    if reset_valid:
+        results["valid"] = True
     if reset_votes:
         results["elected"] = False
     
@@ -196,6 +203,104 @@ def appoint_divisor_district(
             n_seats -= 1
     
     return results.drop(columns="valid")
+
+
+def appoint_divisor_district_two_step(
+    df: pd.DataFrame,
+    district_seats: pd.Series,
+    assign_type: (
+        Literal["dhondt", "sainte-lague"]
+        | Callable[[pd.Series], pd.Series]
+    ) = "dhondt",
+    party_threshold: float = 0.0,
+    minimum_seats: int = 0,
+    selection_criteria: tuple[str, bool] = ("votes", False),
+    reset_votes: bool = True
+) -> pd.DataFrame:
+    """
+    Assigns seats to parties using a two-step method. The first step assigns
+    seats with a divisor method and no thresholds. The second step removes
+    parties that meet BOTH of the following criteria:
+    
+    - The percentage of votes received by the party nationwide is below
+      `party_threshold`.
+    - The number of seats assigned to the party is below `minimum_seats`.
+    
+    The seats are then reallocated between the remaining parties. When a party
+    belonging to a pact is removed, the number of votes received by the party
+    is assigned to the remaining members of the pact.
+    
+    
+    Receives:
+    - `df`: a dataframe with candidate information; it must have at least 4
+        columns: `district`, `pact`, `party`, and `votes`.
+    - `district_seats`: a series containing the number of new seats to be
+        assigned to each district.
+    - `assgin_type`: whether the assignment should be done using
+        D'Hondt/Jefferson or Sainte-Laguë/Webster.
+    - `party_threshold`: minimum percentage of votes a party must receive to be
+        eligible for seat allocation. Must be between 0 and 1.
+    - `minimum_seats`: minimum number of seats a party must receive in the
+      first step in order to be eligible for seat allocation.
+    - `selection_criteria`: criteria by which the candidates for each party
+        will be sorted and selected. First element of the tuple is the column
+        name, second element is whether the sort is ascending or not. Defaults
+        to sorting by the number of votes (descending).
+    - `reset_votes`: whether to create an `elected` column (or modify the
+        existing one) so that every candidate starts as not elected. If this
+        argument is False, then the `elected` column must already exist in the
+        dataframe, and already elected candidates will be considered for the
+        starting coefficients.
+    
+    Returns: a copy of `df`, where the `elected` column says whether each
+    candidate was elected to the parliament or not.
+    """
+    
+    # first step: divisor method, no threshold
+    first_step_results = appoint_divisor_district(
+        df,
+        district_seats,
+        assign_type,
+        0,
+        selection_criteria,
+        reset_votes
+    )
+    first_step_results["valid"] = True
+    
+    # invalidate parties that are below both thresholds
+    # calculate national vote percentages for parties
+    national_votes_party = first_step_results.groupby(
+        ["pact", "party"]
+    )["votes"].sum()
+    percentage_party = national_votes_party / national_votes_party.sum()
+    seats_assigned_party = first_step_results.groupby(
+        ["pact", "party"]
+    )["elected"].sum()
+    
+    # invalidate parties below the threshold (this dataframe will be used
+    # for selecting candidates)
+    for pact, party in national_votes_party.index:
+        
+        if (
+            (percentage_party[(pact, party)] < party_threshold)
+            & (seats_assigned_party[(pact, party)] < minimum_seats)
+        ):
+            first_step_results.loc[
+                first_step_results[first_step_results["party"] == party].index, "valid"
+            ] = False
+    
+    # second step: seat reallocation
+    second_step_results = appoint_divisor_district(
+        first_step_results,
+        district_seats,
+        assign_type,
+        0,
+        selection_criteria,
+        reset_votes=True,
+        reset_valid=False
+    )
+    
+    return second_step_results
 
 
 def appoint_divisor_national(

@@ -28,6 +28,17 @@ def groupby_sum_and_pivot(df, index, columns, values, column_order = None):
         return pivoted_df.reindex(columns=column_order)
     else:
         return pivoted_df
+    
+def format_row_info(name, row):
+    """
+    Given a Series with `percentage` and `seats` entries, returns said info
+    alongside a given name.
+    """
+    
+    return (
+        f"{name}: {row['percentage']*100:.2f}%, "
+        f"{row['seats']:.0f} escaño{'s' if row['seats']!= 1 else ''}"
+    )
 
 
 class Apportionment:
@@ -40,8 +51,8 @@ class Apportionment:
     ):
         """
         Receives:
-        - `results`: a dataframe with six columns: `candidate`, `pact`,
-            `party`, `district`, `votes` and `percentage`.
+        - `results`: a dataframe with seven columns: `candidate`, `pact`,
+            `party`, `district`, `votes`, `percentage`, and `elected`.
         - `colors`: a series with parties on its indices, and a
             `matplotlib`-accepted color for each party as values.
         - `party_order`: a list with all the parties in `results`, in any
@@ -126,6 +137,7 @@ class Apportionment:
         self.district_pact_results = groupby_sum_and_pivot(
             self.results, "district", "pact", "elected"
         ).astype(int)
+
         # pact data
         self.pact_vote_share = (
             self.district_pact_votes.sum(axis=0)
@@ -342,7 +354,129 @@ class Apportionment:
         ax.legend(handles=legend_elems, title="Partidos")
 
         return fig
+    
+    # -------------------------------------- #
+    # NATIONAL, DISTRICT AND PARTY SUMMARIES #
+    # -------------------------------------- #
+    def national_vote_summary(self):
+        """
+        Prints the votes and seats obtained by each pact and party.
+        """
+        
+        pact_summary = self.pact_vote_share.rename("percentage").to_frame()
+        pact_summary["seats"] = self.pact_results
+        pact_summary = pact_summary.sort_values(["seats", "percentage"], ascending=False)
+        
+        print("RESULTADOS POR PACTO:")
+        for pact, row in pact_summary.iterrows():
+            print(format_row_info(pact, row))
+        
+        party_summary = self.party_vote_share.rename("percentage").to_frame()
+        party_summary["seats"] = self.party_results
+        party_summary = party_summary.sort_values(["seats", "percentage"], ascending=False)
+        
+        print("\nRESULTADOS POR PARTIDO:")
+        for party, row in party_summary.iterrows():
+            print(format_row_info(party, row))
+            
+    def district_vote_summary(self, district):
+        """
+        Given a district, prints the votes and seats obtained by each pact and
+        party, alongside the elected candidates.
+        """
 
+        pact_summary = self.district_pact_vote_share.loc[district].rename("percentage").to_frame()
+        pact_summary["seats"] = self.district_pact_results.loc[district]
+        pact_summary = pact_summary.sort_values(["seats", "percentage"], ascending=False)
+        
+        party_summary = self.district_party_vote_share.loc[district].rename("percentage").to_frame()
+        party_summary["seats"] = self.district_party_results.loc[district]
+        
+        print(f"RESULTADOS PARA DISTRITO {district}:")
+        for pact, row in pact_summary.iterrows():
+            
+            # mostramos la info del pacto
+            print(format_row_info(pact, row))
+            
+            # mostramos la info de cada partido dentro del pacto
+            parties_in_pact = self.results[self.results["pact"]==pact]["party"].unique()
+            party_summary_in_pact = (
+                party_summary.loc[parties_in_pact]
+                .sort_values(["seats", "percentage"], ascending=False)
+            )
+            for party, row in party_summary_in_pact.iterrows():
+                print("\t" + format_row_info(party, row))
+                
+                # mostramos la info de cada candidato electo
+                elected_from_party = self.results[
+                    (self.results["party"]==party)
+                    & (self.results["district"]==district)
+                    & (self.results["elected"])
+                ]
+                
+                for _, row in elected_from_party.iterrows():
+                    print(f"\t\t{row['candidate']} ({row['percentage']*100:.2f}%)")
+                    
+    def party_vote_summary(self, party, party_type: Literal["pact", "party"] = "party"):
+        """
+        Given a party/pact, prints the votes and seats obtained by the
+        pact/party in each district, alongside the elected candidates.
+        """
+        
+        base_vote_share = (
+            self.district_party_vote_share
+            if party_type == "party"
+            else self.district_pact_vote_share
+        )
+        base_seats = (
+            self.district_party_results
+            if party_type == "party"
+            else self.district_pact_results
+        )
+        total_vote_share = (
+            self.party_vote_share.loc[party]
+            if party_type == "party"
+            else self.pact_vote_share.loc[party]
+        )
+
+        district_summary = base_vote_share.loc[:, party].rename("percentage").to_frame()
+        district_summary["seats"] = base_seats.loc[:, party]
+        district_summary["available"] = base_seats.sum(axis=1)
+        
+        #print(total_vote_share, base_seats)
+        
+        print(
+            f"RESULTADOS PARA {party}:"
+            f"\nNACIONAL: {total_vote_share*100:.2f}%, {district_summary['seats'].sum():.0f} escaños\n"
+        )
+        for district, row in district_summary.iterrows():
+            
+            candidates_in_district = self.results[
+                (
+                    ((self.results["party"]==party) & (party_type == "party"))
+                    | ((self.results["pact"]==party) & (party_type == "pact"))
+                )
+                & (self.results["district"]==district)
+            ]
+            n_candidates = len(candidates_in_district)
+            elected_in_district = candidates_in_district[
+                candidates_in_district["elected"]
+            ]
+            
+            # mostramos la info del distrito
+            print(
+                f"\nDistrito {district}: "
+                f"{n_candidates} candidato{'s' if n_candidates!=1 else ''}, "
+                f"{row['percentage']*100:.2f}%, "
+                f"{row['seats']:.0f}/{row['available']:.0f} escaño{'s' if row['available']!= 1 else ''}"
+            )
+            
+            # mostramos la info de cada candidato electo
+            for _, row in elected_in_district.iterrows():
+                print(f"\t{row['candidate']} ({row['percentage']*100:.2f}%)")
+
+            
+    
     # summary of statistics
     def summary(self):
         """
